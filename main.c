@@ -590,11 +590,11 @@ int main(int argc, char *argv[]) {
             fprintf(file_loss, "%d, %f\n", t, validation_loss);
             fclose(file_loss);
     
-            printf("\rt=%d,000, loss=%5.3f: ", t/1000, validation_loss);
-            model_prompt_response(&m, (unsigned char*)"insert your validation prompt here ", 80);
+            printf("\rt=%d,000, loss=%5.3f, lr=%.5f: ", t/1000, validation_loss, LEARNING_RATE);
+            model_prompt_response(&m, prompt, 80);
             printf("\n"); 
         }
-        printf("\rt=%d", t); fflush(stdout);
+        printf("\rt=%d, lr=%.5f", t, learning_rate); fflush(stdout);
     }
     
     free_Model(&m);
