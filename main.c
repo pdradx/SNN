@@ -555,7 +555,7 @@ void model_prompt_response(Model* m, unsigned char* prompt, int response_length)
 int main(int argc, char *argv[]) {
 
     TrainingData training;
-    load_training_data(&training, "train_v2_drcat_02.csv");
+    load_training_data(&training, "./shakespeare.txt");
 
     {FILE *file_loss = fopen(FILE_NAME, "w"); fclose(file_loss);}
     {FILE *file_prompts = fopen(PROMPTS_FILE_NAME, "w"); fclose(file_prompts);}
