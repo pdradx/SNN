@@ -470,7 +470,7 @@ void load_training_data(TrainingData* training, char* fname) {
     training->data = local_data;
     training->length -= CONTEXT_SIZE + 1;
 
-    training->reserved_for_testing = (unsigned char*)calloc(training->length, sizeof(unsigned char));
+    training->reserved_for_testing = (unsigned char*)calloc(file_size, sizeof(unsigned char));
     memset(training->reserved_for_testing, 0, training->length*sizeof(unsigned char));
 
     for (int i = 0; i < TESTING_LENGTH; i++) {
