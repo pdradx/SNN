@@ -12,6 +12,7 @@
 #include <sys/mman.h>
 
 #define FILE_NAME "loss.csv"    // saves validation loss values during training
+#define PROMPTS_FILE_NAME "output_prompts.txt"    
 
 #define CONTEXT_SIZE            32
 #define VOCAB_SIZE              256
@@ -515,16 +516,25 @@ int model_inference(Model* m) {
 
 void model_prompt_response(Model* m, unsigned char* prompt, int response_length) {
 
+    FILE *file_out = fopen(PROMPTS_FILE_NAME, "a");
     unsigned char prompt_copy[CONTEXT_SIZE+1];
-    strlcpy((char *)prompt_copy, (const char *)prompt, CONTEXT_SIZE+1); // Need to fix: what if the prompt is too short?
-    printf("%s", prompt_copy);
+    const size_t prompt_length = strlen((char *)prompt);
+
+    if (CONTEXT_SIZE > prompt_length) {
+        printf("Prompt is too short! prompt_length=%zu; context_length=%d\n", prompt_length, CONTEXT_SIZE);
+        exit(1);
+    }
+
+    strncpy((char *)prompt_copy, (const char *)prompt, CONTEXT_SIZE+1); // Need to fix: what if the prompt is too short?
+    fprintf(file_out, "%s", prompt_copy);
 
     for (int i = 0; i < response_length; i++) {
         for (int pos = 0; pos < CONTEXT_SIZE; pos++) {
             embed_token(m, prompt_copy, pos, m->z[pos]);
         }
         int response = model_inference(m);
-        printf("%c", (unsigned char)response);
+        const unsigned char c = (unsigned char) response;
+        fprintf(file_out, "%c", c);
 
         // shift the prompt by one character and insert response as the last character
         for (int j = 0; j < CONTEXT_SIZE-1; j++) {
@@ -532,6 +542,8 @@ void model_prompt_response(Model* m, unsigned char* prompt, int response_length)
         }
         prompt_copy[CONTEXT_SIZE-1] = (unsigned char)response; 
     }
+    fprintf(file_out, "\n=== END ===\n\n");
+    fclose(file_out);
 }
 
 
@@ -545,10 +557,15 @@ int main(int argc, char *argv[]) {
     TrainingData training;
     load_training_data(&training, "train_v2_drcat_02.csv");
 
-    FILE *file_loss = fopen(FILE_NAME, "w"); fclose(file_loss);
+    {FILE *file_loss = fopen(FILE_NAME, "w"); fclose(file_loss);}
+    {FILE *file_prompts = fopen(PROMPTS_FILE_NAME, "w"); fclose(file_prompts);}
 
     Model m;
     build_Model(&m);
+
+    unsigned char prompt[CONTEXT_SIZE + 1];
+    strncpy((char *)prompt, (char *)training.data, CONTEXT_SIZE);
+    prompt[CONTEXT_SIZE] = '\0';
     
     for (int t = 0; t < 100000000; t++) {
 
