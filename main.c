@@ -573,7 +573,7 @@ int main(int argc, char *argv[]) {
         learning_rate = LEARNING_RATE; // Adam scheduler
         model_training_step(&m);
     
-        if (t % 10000 == 0) {
+        if (t % 1000 == 0) {
 
             printf("...validating... "); fflush(stdout);
             float validation_loss = 0;
