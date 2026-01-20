@@ -34,7 +34,7 @@
 #define LEARNING_RATE  (MIN( 0.01, t/(4000.0)/sqrt(4000) )) // Adam learning rate scheduler
 // #define LEARNING_RATE  (MIN( 1.0 /sqrt(1.0+t), t/(4000.0)/sqrt(4000.0) )) // Adam learning rate scheduler
 float learning_rate;
-#define TESTING_LENGTH 10000
+#define TESTING_LENGTH 100
 
 
 // ----------------------------------------------------------------------------
