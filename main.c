@@ -27,16 +27,22 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define SQUARE(a) ((a) * (a))
 #define sign(x) (x > 0 ? 1 : -1)        // zero has "minus" sign
 #define U(x) ( 0.5/(1+fabs(x)) )        // not used; here for reference
 #define Up(x) (-0.5*sign(x)/(1+fabs(x))/(1+fabs(x))) 
 
+#define WARMUP_STEPS 100
 // #define LEARNING_RATE  (MIN( 1 /sqrt(1+t), t/(4000.0)/sqrt(4000) )) // Adam learning rate scheduler
-#define LEARNING_RATE  (MIN( 0.01, t/(4000.0)/sqrt(4000) )) // Adam learning rate scheduler
+#define LEARNING_RATE  (MIN( 0.1, t/((float)WARMUP_STEPS)/sqrt(WARMUP_STEPS) )) // Adam learning rate scheduler
 // #define LEARNING_RATE  (MIN( 1.0 /sqrt(1.0+t), t/(4000.0)/sqrt(4000.0) )) // Adam learning rate scheduler
 float learning_rate;
-#define TESTING_LENGTH 100
+#define TESTING_LENGTH 10
 
+#define WEIGHT_DECAY ((double) (0.00001))
+#define RANDOM_SCALE 0.01f
+
+double grad_norm;
 
 // ----------------------------------------------------------------------------
 // Spiking model
@@ -236,7 +242,10 @@ void LUT_backward(LUT* lut, LUTcache* cache, float* x_gradient, float* y_gradien
         BACKWARD_UPDATE(cache, x_gradient);
 
         for (int k = 0; k < lut->y_dim; k++) {
-            lut->S[i][ j + k] -= learning_rate * y_gradient[k];
+            const double g = y_gradient[k];
+            lut->S[i][ j + k] -= learning_rate * g;
+            grad_norm += SQUARE(g);
+            lut->S[i][ j + k] *= (1.0 - WEIGHT_DECAY);        
         }
     }
 }
@@ -280,20 +289,23 @@ void concatenated_LUT_backward(LUT* lut, LUTcache* cacheQ, LUTcache* cacheK, LUT
         }
 
         for (int k = 0; k < lut->y_dim; k++) {
-            lut->S[i][ j + k] -= learning_rate * y_gradient[k];
+            const double g = y_gradient[k];
+            lut->S[i][ j + k] -= learning_rate * g;
+            grad_norm += SQUARE(g);
+            lut->S[i][ j + k] *= (1.0 - WEIGHT_DECAY);
         }
     }
 }
 
 void build_Model(Model* m) {
 
-    random_vector(m->Token_embedder[0], VOCAB_SIZE*EMBEDDING_DIM, 1.0f);
+    random_vector(m->Token_embedder[0], VOCAB_SIZE*EMBEDDING_DIM, RANDOM_SCALE);
  
     for (int l = 0; l < NUM_LAYERS; l++) {
         // the inputs are z_pos
         build_LUT(&m->FFN[l], N_C, EMBEDDING_DIM); 
         for (int h = 0; h < NUM_HEADS; h++) {
-            random_vector(m->head[l][h].Positional_encoding[0][0], CONTEXT_SIZE*N_T*POSITIONAL_DIM, 1.0f);
+            random_vector(m->head[l][h].Positional_encoding[0][0], CONTEXT_SIZE*N_T*POSITIONAL_DIM, RANDOM_SCALE);
             // the inputs are concatenated [Q, P, PE]
             build_LUT(&m->head[l][h].V, N_C + N_C + POSITIONAL_DIM, EMBEDDING_DIM); 
         }
@@ -402,7 +414,10 @@ void model_backward(Model* m) {
     for (int pos = 0; pos < CONTEXT_SIZE; pos++) {
         for (int k = 0; k < EMBEDDING_DIM; k++) {
             // does not improve performance in character prediction mode, so OK to disable
-            //m->Token_embedder[ m->tokens[pos] ][k] -= learning_rate * x_grad[pos][k]; 
+            const double g = x_grad[pos][k];
+            m->Token_embedder[ m->tokens[pos] ][k] -= learning_rate * g; 
+            grad_norm += SQUARE(g);
+            m->Token_embedder[ m->tokens[pos] ][k] *= (1.0 - WEIGHT_DECAY);
         }
     }
 }
@@ -413,7 +428,11 @@ void model_training_step(Model* m) {
     for (int pos = 0; pos < CONTEXT_SIZE; pos++) {
         softmax(m->output[pos], VOCAB_SIZE, 1.0f);
         m->output[pos][ m->tokens[pos+1] ] -= 1.0f; // output become a gradient
+        for (int i = 0; i < VOCAB_SIZE; i++) {
+            m->output[pos][i] /= CONTEXT_SIZE;// calculate mean value
+        }
     }
+    grad_norm = 0;
     model_backward(m);
 }
 
@@ -590,11 +609,12 @@ int main(int argc, char *argv[]) {
             fprintf(file_loss, "%d, %f\n", t, validation_loss);
             fclose(file_loss);
     
-            printf("\rt=%d,000, loss=%5.3f, lr=%.5f: ", t/1000, validation_loss, LEARNING_RATE);
-            model_prompt_response(&m, prompt, 80);
+            printf("\rt=%d,000, loss=%5.3f, lr=%.5f, grad_norm=%.5f: \n", t/1000, validation_loss, LEARNING_RATE, sqrt(grad_norm));
+            printf("Prompt generation: \n");
+            model_prompt_response(&m, prompt, 128);
             printf("\n"); 
         }
-        printf("\rt=%d, lr=%.5f", t, learning_rate); fflush(stdout);
+        printf("\rt=%d, lr=%.5f, grad_norm=%.5f", t, learning_rate, sqrt(grad_norm)); fflush(stdout);
     }
     
     free_Model(&m);
